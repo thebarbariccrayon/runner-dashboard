@@ -9,6 +9,10 @@ Lightweight terminal & browser dashboard for monitoring a self-hosted GitHub Act
 - **Service installer** — one-command install as a systemd service (Linux) or LaunchAgent (macOS)
 - **nginx reverse proxy** — optional installer writes a ready-to-use nginx vhost config with configurable path prefix
 
+## Demo
+
+https://github.com/user-attachments/assets/cdad93bf-375d-489d-bf03-3486cc3a3824
+
 ## Requirements
 
 - Python ≥ 3.9
