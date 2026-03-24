@@ -11,7 +11,7 @@ Lightweight terminal & browser dashboard for monitoring a self-hosted GitHub Act
 
 ## Demo
 
-https://github.com/user-attachments/assets/cdad93bf-375d-489d-bf03-3486cc3a3824
+https://github.com/user-attachments/assets/6e8d7b7f-3c7b-4344-94e9-2662cc548c70
 
 ## Requirements
 
