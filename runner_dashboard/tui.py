@@ -32,20 +32,23 @@ from .constants import LOG_KEYWORDS
 # ── Formatting helpers ────────────────────────────────────────────────────────
 
 def _shorten_service_name(svc: str, runner_name: str = "") -> str:
-    """Return a short, human-readable label for the runner service.
+    """Return the project/repo label from the runner service name.
 
-    Uses the runner's registered *agentName* when available (most accurate),
-    otherwise strips the ``actions.runner.`` prefix / ``.service`` suffix and
-    returns the last dot-separated segment (the runner name portion).
+    GitHub Actions service names follow the pattern:
+        actions.runner.<org>-<repo>.<runner-name>.service
+
+    We want the <org>-<repo> segment — the project the runner is assigned to.
+    The runner-name segment (last) is typically just a hostname and is ignored.
     """
-    if runner_name:
-        return runner_name
     # Strip well-known boilerplate
     s = re.sub(r'^actions\.runner\.', '', svc, flags=re.IGNORECASE)
     s = re.sub(r'\.service$', '', s, flags=re.IGNORECASE)
-    # If multiple dot-segments remain, the last is the runner/project name
     parts = s.split('.')
-    return parts[-1] if len(parts) > 1 else s
+    # parts[0] is <org>-<repo>, parts[1] (if present) is the runner hostname
+    # Always prefer the project segment over the runner/hostname segment.
+    if len(parts) >= 2:
+        return parts[0]
+    return parts[0] if parts else svc
 
 
 def _bar(percent: float, width: int = 20) -> Text:
