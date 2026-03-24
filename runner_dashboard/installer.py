@@ -20,6 +20,22 @@ from . import console
 from .constants import LAUNCHD_ID, SVC_NAME, SYSTEMD_SVC
 
 
+# ── Privilege escalation ──────────────────────────────────────────────────────
+
+def _require_root() -> None:
+    """On Linux, if not already root, re-exec the current command under sudo."""
+    if platform.system() != "Linux" or os.geteuid() == 0:
+        return
+    import shutil
+    sudo = shutil.which("sudo")
+    if sudo is None:
+        _print_err("Root privileges required. Please run as root.")
+        sys.exit(1)
+    console.print("[dim]  → root required for /etc/nginx — re-running with sudo...[/dim]")
+    # Replace current process image with: sudo <same argv>
+    os.execvp(sudo, [sudo] + sys.argv)
+
+
 # ── Shell helpers ─────────────────────────────────────────────────────────────
 
 def _run_cmd(cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
@@ -45,6 +61,8 @@ def _build_exec_args(args: argparse.Namespace) -> List[str]:
               "--interval", str(int(args.interval))]
     if args.runner_path:
         parts += ["--runner-path", str(args.runner_path)]
+    if getattr(args, "url_prefix", "/") not in ("/", ""):
+        parts += ["--url-prefix", args.url_prefix]
     return parts
 
 
@@ -378,6 +396,7 @@ def _nginx_reload() -> None:
 
 
 def _nginx_install(args: argparse.Namespace) -> None:
+    _require_root()
     upstream_port = args.port
     listen_port   = args.nginx_listen_port
     server_name   = args.nginx_server_name
@@ -432,6 +451,7 @@ def _nginx_install(args: argparse.Namespace) -> None:
 
 
 def _nginx_uninstall() -> None:
+    _require_root()
     conf_dir = _nginx_conf_path()
     console.print("\n[bold]Removing nginx reverse proxy config[/bold]")
 

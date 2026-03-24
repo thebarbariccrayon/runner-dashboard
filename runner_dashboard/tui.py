@@ -6,6 +6,7 @@ Rich panel builders and the top-level build_dashboard() function.
 Depends only on collector (data) and constants — no web or installer imports.
 """
 
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -29,6 +30,23 @@ from .constants import LOG_KEYWORDS
 
 
 # ── Formatting helpers ────────────────────────────────────────────────────────
+
+def _shorten_service_name(svc: str, runner_name: str = "") -> str:
+    """Return a short, human-readable label for the runner service.
+
+    Uses the runner's registered *agentName* when available (most accurate),
+    otherwise strips the ``actions.runner.`` prefix / ``.service`` suffix and
+    returns the last dot-separated segment (the runner name portion).
+    """
+    if runner_name:
+        return runner_name
+    # Strip well-known boilerplate
+    s = re.sub(r'^actions\.runner\.', '', svc, flags=re.IGNORECASE)
+    s = re.sub(r'\.service$', '', s, flags=re.IGNORECASE)
+    # If multiple dot-segments remain, the last is the runner/project name
+    parts = s.split('.')
+    return parts[-1] if len(parts) > 1 else s
+
 
 def _bar(percent: float, width: int = 20) -> Text:
     filled  = int(width * min(percent, 100) / 100)
@@ -74,7 +92,7 @@ def _header_panel(runner_path: Optional[Path]) -> Panel:
     return Panel(Align.center(t), style="bold blue", padding=(0, 1))
 
 
-def _status_panel(status: Dict[str, Any], job: Dict[str, Any]) -> Panel:
+def _status_panel(status: Dict[str, Any], job: Dict[str, Any], config: Dict[str, str]) -> Panel:
     _colors = {
         "running": "bold green", "active": "bold green",
         "stopped": "bold red",   "failed": "bold red",
@@ -95,7 +113,8 @@ def _status_panel(status: Dict[str, Any], job: Dict[str, Any]) -> Panel:
         Text(state.upper(), style=_colors.get(state, "white")),
     )
     if status.get("service_name"):
-        tbl.add_row(Text("  Service:", style="bold"), Text(status["service_name"], style="cyan"))
+        label = _shorten_service_name(status["service_name"], config.get("name", ""))
+        tbl.add_row(Text("  Service:", style="bold"), Text(label, style="cyan"))
     if status.get("pid"):
         tbl.add_row(Text("  PID:", style="bold"), Text(str(status["pid"]), style="cyan"))
     if status.get("uptime"):
@@ -216,7 +235,7 @@ def build_dashboard(runner_path: Optional[Path], service_name: Optional[str]) ->
     )
 
     layout["header"].update(_header_panel(runner_path))
-    layout["status"].update(_status_panel(status, job))
+    layout["status"].update(_status_panel(status, job, config))
     layout["job"].update(_job_panel(job))
     layout["identity"].update(_identity_panel(config))
     layout["resources"].update(_resources_panel(res))

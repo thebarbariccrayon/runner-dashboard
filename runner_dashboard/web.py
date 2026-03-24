@@ -99,14 +99,13 @@ footer{margin-top:20px;text-align:center;font-size:11px;color:#6e7681}
 <div class="card">
   <h1>&#9654; <span>Runner</span> Dashboard</h1>
   __ERROR__
-  <form method="POST" action="/login">
+  <form method="POST" action="__URL_PREFIX__login">
     <label for="u">Username</label>
     <input id="u" type="text" name="username" autocomplete="username" autofocus>
     <label for="p">Password</label>
     <input id="p" type="password" name="password" autocomplete="current-password">
     <button type="submit">Sign In</button>
   </form>
-  <footer>Authenticated via system PAM</footer>
 </div>
 </body>
 </html>
@@ -149,7 +148,7 @@ html,body{margin:0;padding:0;background:#0d1117;overflow-x:auto;color-scheme:dar
   <span class="spacer"></span>
   <span class="cd">next refresh in <span id="cdn">—</span>s</span>
   <span id="badge" class="ok">&#9679; LIVE</span>
-  <a href="/logout" id="logout">Sign out</a>
+  <a href="__URL_PREFIX__logout" id="logout">Sign out</a>
 </div>
 <span id="_cw" aria-hidden="true" style="position:absolute;visibility:hidden;
   font-family:ui-monospace,'Cascadia Code','Fira Code',monospace;font-size:14px">M</span>
@@ -221,9 +220,23 @@ def render_tui_fragment(
 _MAX_POST_BODY = 4096  # bytes – caps memory allocated when reading login form body
 
 
-def _make_handler(runner_path_hint: Optional[str], interval: float, session_timeout: float):
+def _make_handler(runner_path_hint: Optional[str], interval: float, session_timeout: float,
+                  url_prefix: str = "/"):
     """Return a BaseHTTPRequestHandler subclass that serves the dashboard."""
-    _html_bytes = WEB_HTML.replace("__INTERVAL__", str(int(interval))).encode()
+    # Normalise prefix: always starts with '/' and ends with '/'
+    _prefix = "/" + url_prefix.strip("/")
+    if not _prefix.endswith("/"):
+        _prefix += "/"
+    _login_url  = _prefix + "login"
+    _logout_url = _prefix + "logout"
+
+    _html_bytes = (
+        WEB_HTML
+        .replace("__INTERVAL__", str(int(interval)))
+        .replace("__URL_PREFIX__", _prefix)
+        .encode()
+    )
+    _login_html_tpl = LOGIN_HTML.replace("__URL_PREFIX__", _prefix)
 
     # Re-discover runner path at most once per TTL to avoid hammering the FS
     _cache: Dict[str, Any] = {"runner_path": None, "service_name": None, "ts": 0.0}
@@ -293,9 +306,9 @@ def _make_handler(runner_path_hint: Optional[str], interval: float, session_time
                 _sessions.pop(token, None)
 
         def _require_auth(self) -> bool:
-            """Redirect to /login if not authenticated; return True if OK."""
+            """Redirect to login if not authenticated; return True if OK."""
             if not self._is_authenticated():
-                self._redirect("/login")
+                self._redirect(_login_url)
                 return False
             return True
 
@@ -325,14 +338,14 @@ def _make_handler(runner_path_hint: Optional[str], interval: float, session_time
 
             # Public routes (no auth required)
             if path == "/login":
-                body = LOGIN_HTML.replace("__ERROR__", "").encode()
+                body = _login_html_tpl.replace("__ERROR__", "").encode()
                 self._send(200, "text/html; charset=utf-8", body)
                 return
 
             if path == "/logout":
                 self._destroy_session()
                 self.send_response(303)
-                self.send_header("Location", "/login")
+                self.send_header("Location", _login_url)
                 self.send_header(
                     "Set-Cookie",
                     "session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
@@ -415,7 +428,7 @@ def _make_handler(runner_path_hint: Optional[str], interval: float, session_time
                     error = "Invalid credentials."
 
             if error:
-                page = LOGIN_HTML.replace(
+                page = _login_html_tpl.replace(
                     "__ERROR__",
                     f'<div class="err">{_html.escape(error)}</div>',
                 )
@@ -424,7 +437,7 @@ def _make_handler(runner_path_hint: Optional[str], interval: float, session_time
 
             token = self._create_session()
             self.send_response(303)
-            self.send_header("Location", "/")
+            self.send_header("Location", _prefix)
             self.send_header(
                 "Set-Cookie",
                 f"session={token}; HttpOnly; SameSite=Strict; "
@@ -451,8 +464,9 @@ def serve_web(
     port: int,
     interval: float,
     session_timeout: float = 1800.0,
+    url_prefix: str = "/",
 ) -> None:
-    handler = _make_handler(runner_path_hint, interval, session_timeout)
+    handler = _make_handler(runner_path_hint, interval, session_timeout, url_prefix)
     server  = HTTPServer((host, port), handler)
     from . import console
     console.print(f"[bold green]Web dashboard running at http://{host}:{port}/[/bold green]")

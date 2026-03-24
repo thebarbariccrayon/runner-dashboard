@@ -69,6 +69,8 @@ Examples:
     parser.add_argument("--session-timeout", type=int, default=30,
                         metavar="MINUTES",
                         help="(web) Inactivity timeout for login sessions in minutes (default: 30)")
+    parser.add_argument("--url-prefix", default="/",
+                        help="(web) URL path prefix when served behind a reverse proxy (e.g. /runner)")
 
     # Installer flags
     parser.add_argument("--install", action="store_true",
@@ -133,7 +135,8 @@ Examples:
     # ── Web mode ──────────────────────────────────────────────────────────────
     if args.web:
         serve_web(args.runner_path, args.bind, args.port, args.interval,
-                  session_timeout=args.session_timeout * 60.0)
+                  session_timeout=args.session_timeout * 60.0,
+                  url_prefix=args.url_prefix)
         return
 
     # ── TUI mode ──────────────────────────────────────────────────────────────
