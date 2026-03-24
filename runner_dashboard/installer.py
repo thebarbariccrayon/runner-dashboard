@@ -47,13 +47,56 @@ def _print_err(msg: str)  -> None: console.print(f"[bold red]  \u2718  {msg}[/bo
 def _print_info(msg: str) -> None: console.print(f"[dim]     {msg}[/dim]")
 
 
+# ── Virtualenv management ─────────────────────────────────────────────────────
+
+def _venv_path(user_scope: bool) -> Path:
+    """Return the canonical venv directory for this install type."""
+    if user_scope:
+        return Path.home() / ".local" / "runner-dashboard" / "venv"
+    return Path("/opt/runner-dashboard/venv")
+
+
+def _ensure_venv(venv_dir: Path) -> Path:
+    """Create (or reuse) the venv and install the package + all deps into it.
+
+    Returns the path to the venv's Python interpreter.
+    """
+    import shutil
+    venv_python = venv_dir / "bin" / "python3"
+
+    # Locate the package source (the directory containing pyproject.toml)
+    pkg_root = Path(__file__).resolve().parent.parent
+
+    console.print(f"\n[bold]Setting up virtual environment[/bold]")
+    _print_info(f"Location: {venv_dir}")
+
+    if not venv_python.exists():
+        python_bin = shutil.which("python3") or sys.executable
+        r = _run_cmd([python_bin, "-m", "venv", str(venv_dir)], check=False)
+        if r.returncode != 0:
+            _print_err(f"venv creation failed: {r.stderr.strip() or r.stdout.strip()}")
+            sys.exit(1)
+        _print_ok(f"Created venv at {venv_dir}")
+    else:
+        _print_info("Reusing existing venv")
+
+    pip = venv_dir / "bin" / "pip"
+    # Upgrade pip quietly first to avoid stale-pip warnings
+    _run_cmd([str(pip), "install", "--quiet", "--upgrade", "pip"], check=False)
+    r = _run_cmd([str(pip), "install", "--quiet", str(pkg_root)], check=False)
+    if r.returncode != 0:
+        _print_err(f"pip install failed: {r.stderr.strip() or r.stdout.strip()}")
+        sys.exit(1)
+    _print_ok("Installed runner-dashboard and dependencies")
+
+    return venv_python
+
+
 # ── Service unit / plist generators ──────────────────────────────────────────
 
-def _build_exec_args(args: argparse.Namespace) -> List[str]:
+def _build_exec_args(args: argparse.Namespace, venv_python: Optional[str] = None) -> List[str]:
     """Reconstruct the web-mode CLI flags from parsed args for service files."""
-    py     = sys.executable
-    # When installed as a script entry point the module path is used; fall back
-    # to invoking the package as a module so it works both ways.
+    py = venv_python or sys.executable
     parts  = [py, "-m", "runner_dashboard",
               "--web",
               "--port",     str(args.port),
@@ -66,8 +109,8 @@ def _build_exec_args(args: argparse.Namespace) -> List[str]:
     return parts
 
 
-def _systemd_unit(args: argparse.Namespace, user_scope: bool) -> str:
-    exec_start = " ".join(_build_exec_args(args))
+def _systemd_unit(args: argparse.Namespace, user_scope: bool, venv_python: str) -> str:
+    exec_start = " ".join(_build_exec_args(args, venv_python))
     user_line  = "" if user_scope else f"User={os.environ.get('USER', 'root')}\n"
     return (
         f"[Unit]\n"
@@ -86,8 +129,8 @@ def _systemd_unit(args: argparse.Namespace, user_scope: bool) -> str:
     )
 
 
-def _launchd_plist(args: argparse.Namespace) -> str:
-    exec_args = _build_exec_args(args)
+def _launchd_plist(args: argparse.Namespace, venv_python: str) -> str:
+    exec_args = _build_exec_args(args, venv_python)
     log_dir   = Path.home() / "Library" / "Logs"
     log_out   = str(log_dir / f"{SVC_NAME}.out.log")
     log_err   = str(log_dir / f"{SVC_NAME}.err.log")
@@ -121,14 +164,16 @@ def _systemd_install(args: argparse.Namespace, user_scope: bool) -> None:
         if user_scope else Path("/etc/systemd/system")
     )
     unit_file  = unit_dir / SYSTEMD_SVC
-    content    = _systemd_unit(args, user_scope)
     scope_flag = ["--user"] if user_scope else []
 
     console.print(f"\n[bold]Installing systemd service[/bold] ({'user' if user_scope else 'system'} scope)")
+
+    venv_python = str(_ensure_venv(_venv_path(user_scope)))
+    content    = _systemd_unit(args, user_scope, venv_python)
     try:
         unit_dir.mkdir(parents=True, exist_ok=True)
         unit_file.write_text(content)
-        _print_ok(f"Unit file → {unit_file}")
+        _print_ok(f"Unit file \u2192 {unit_file}")
     except PermissionError:
         _print_err(f"Permission denied writing {unit_file}")
         console.print("[yellow]  Hint: run with sudo for system-wide install, or add --user-service[/yellow]")
@@ -189,15 +234,17 @@ def _systemd_status(user_scope: bool) -> None:
 def _launchd_install(args: argparse.Namespace) -> None:
     agents_dir = Path.home() / "Library" / "LaunchAgents"
     plist_file = agents_dir / f"{LAUNCHD_ID}.plist"
-    content    = _launchd_plist(args)
     log_dir    = Path.home() / "Library" / "Logs"
 
     console.print("\n[bold]Installing launchd service[/bold] (user LaunchAgent)")
+
+    venv_python = str(_ensure_venv(_venv_path(user_scope=True)))
+    content    = _launchd_plist(args, venv_python)
     try:
         agents_dir.mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
         plist_file.write_text(content)
-        _print_ok(f"Plist → {plist_file}")
+        _print_ok(f"Plist \u2192 {plist_file}")
     except OSError as exc:
         _print_err(f"Could not write plist: {exc}")
         sys.exit(1)

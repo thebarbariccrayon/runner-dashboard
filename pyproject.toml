@@ -13,6 +13,7 @@ dependencies = [
     "rich>=13.0",
     "psutil>=5.9",
     "python-pam>=2.0",
+    "six",
 ]
 
 [project.scripts]
