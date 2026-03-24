@@ -1,0 +1,2 @@
+[console_scripts]
+runner-dashboard = runner_dashboard.cli:main

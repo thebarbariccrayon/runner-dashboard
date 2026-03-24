@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+runner_dashboard/__init__.py
+runner_dashboard/cli.py
+runner_dashboard/collector.py
+runner_dashboard/constants.py
+runner_dashboard/installer.py
+runner_dashboard/tui.py
+runner_dashboard/web.py
+runner_dashboard.egg-info/PKG-INFO
+runner_dashboard.egg-info/SOURCES.txt
+runner_dashboard.egg-info/dependency_links.txt
+runner_dashboard.egg-info/entry_points.txt
+runner_dashboard.egg-info/requires.txt
+runner_dashboard.egg-info/top_level.txt
