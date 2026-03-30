@@ -80,6 +80,16 @@ def _ensure_venv(venv_dir: Path) -> Path:
     else:
         _print_info("Reusing existing venv")
 
+    # Remove any stale build directory left by a previous install (possibly run
+    # as a different user / root) to avoid "Permission denied" errors from setuptools.
+    import shutil as _shutil
+    build_dir = pkg_root / "build"
+    if build_dir.exists():
+        try:
+            _shutil.rmtree(build_dir)
+        except OSError:
+            pass  # pip will surface the real error if it still can't write here
+
     pip = venv_dir / "bin" / "pip"
     # Upgrade pip quietly first to avoid stale-pip warnings
     _run_cmd([str(pip), "install", "--quiet", "--upgrade", "pip"], check=False)
